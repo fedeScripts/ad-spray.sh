@@ -1,8 +1,5 @@
 #!/bin/bash
-
 # Autor: Federico Galarza
-# Version: 1
-
 
 # Colores
 B="\e[94m"           # Azul
@@ -19,18 +16,25 @@ SLEEP_SCALE=2 # Valor por defecto
 TOTAL_PASSWORDS=0
 TOTAL_USERS=0
 VALID_CREDENTIALS=0
+VERSION=1.0
+
+function banner(){
+    echo -e "${B}AD - Spray ${NF}"
+    echo -e "${B}Version: ${Y}$VERSION ${NF}\n"
+}
 
 # Función de uso
 function usage() {
-    echo -e "${Y}[!]${NF} Uso: $0 -U [archivo_usuarios] -u [usuario] -P [archivo_contraseñas] -p [contraseña] -s [servidor] -d [dominio] -t [nivel_de_tiempo]"
+    banner
+    echo -e "${Y}[!]${NF} Uso: ${G}$0${NF} -U [archivo_usuarios] -u [usuario] -P [archivo_contraseñas] -p [contraseña] -s [servidor] -d [dominio] -t [nivel_de_tiempo]"
     echo -e "${B}[i]${NF} Opciones:"
-    echo "  -U    Archivo con la lista de usuarios (uno por línea)"
-    echo "  -u    Un único usuario"
-    echo "  -P    Archivo con la lista de contraseñas (una por línea)"
-    echo "  -p    Una única contraseña"
-    echo "  -s    Servidor SMB (por ejemplo, 192.168.1.10)"
-    echo "  -d    Dominio (opcional)"
-    echo "  -t    Nivel de tiempo (1: Paranoid, 2: Stealth (por defecto), 3: Fast, 4: More fast)"
+    echo -e "    ${Y}-U${NF}    Archivo con la lista de usuarios (uno por línea)"
+    echo -e "    ${Y}-u${NF}    Un único usuario"
+    echo -e "    ${Y}-P${NF}    Archivo con la lista de contraseñas (una por línea)"
+    echo -e "    ${Y}-p${NF}    Una única contraseña"
+    echo -e "    ${Y}-s${NF}    Servidor SMB (por ejemplo, 192.168.1.10)"
+    echo -e "    ${Y}-d${NF}    Dominio (opcional)"
+    echo -e "    ${Y}-t${NF}    Nivel de tiempo (1: Paranoid, 2: Stealth (por defecto), 3: Fast, 4: More fast)"
     exit 1
 }
 
@@ -108,25 +112,25 @@ function track_stats() {
 function validate_parameters() {
     if [[ -z "$SERVER" || (-z "$USERS_FILE" && -z "$SINGLE_USER") || 
           (-z "$PASSWORDS_FILE" && -z "$SINGLE_PASSWORD") ]]; then
-        echo -e "${Y}[!]${NF} Error: Parámetros faltantes."
+        echo -e "${Y}[!]${NF} Error: Parámetros faltantes.\n"
         usage
     fi
 
     if [[ -n "$USERS_FILE" && -n "$SINGLE_USER" ]]; then
-        echo -e "${Y}[!]${NF} Error: No se puede usar -U y -u al mismo tiempo."
+        echo -e "${Y}[!]${NF} Error: No se puede usar -U y -u al mismo tiempo.\n"
         usage
     fi
     if [[ -n "$PASSWORDS_FILE" && -n "$SINGLE_PASSWORD" ]]; then
-        echo -e "${Y}[!]${NF} Error: No se puede usar -P y -p al mismo tiempo."
+        echo -e "${Y}[!]${NF} Error: No se puede usar -P y -p al mismo tiempo.\n"
         usage
     fi
 
     if [[ -n "$USERS_FILE" && ! -f "$USERS_FILE" ]]; then
-        echo -e "${Y}[!]${NF} Error: Archivo de usuarios no encontrado: $USERS_FILE"
+        echo -e "${Y}[!]${NF} Error: Archivo de usuarios no encontrado: $USERS_FILE\n"
         exit 1
     fi
     if [[ -n "$PASSWORDS_FILE" && ! -f "$PASSWORDS_FILE" ]]; then
-        echo -e "${Y}[!]${NF} Error: Archivo de contraseñas no encontrado: $PASSWORDS_FILE"
+        echo -e "${Y}[!]${NF} Error: Archivo de contraseñas no encontrado: $PASSWORDS_FILE\n"
         exit 1
     fi
 }
