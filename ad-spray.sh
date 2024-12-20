@@ -13,11 +13,12 @@ NF="\e[0m"           # Normal format
 
 # Variables globales
 SCRIPT_NAME="ad-spray.sh"
-VERSION=1.0
+VERSION=1.1
 LOG_FILE=""
 SLEEP_SCALE=2 # Valor por defecto
 TOTAL_PASSWORDS=0
 TOTAL_USERS=0
+TOTAL_COMBINATIONS=0
 VALID_CREDENTIALS=0
 
 function banner(){
@@ -109,9 +110,15 @@ function random_sleep() {
 # Función para rastrear estadísticas
 function track_stats() {
     local type=$1
+    local users_file=$2
+    local passwords_file=$2
+
     case "$type" in
-        user) ((TOTAL_USERS++)) ;;
-        password) ((TOTAL_PASSWORDS++)) ;;
+        user) TOTAL_USERS=$(wc -w "$users_file" 2>/dev/null | cut -d " " -f 1) ;;
+        password) TOTAL_PASSWORDS=$(wc -w "$passwords_file" 2>/dev/null | cut -d " " -f 1) ;;
+        suser) TOTAL_USERS=1 ;;
+        spass) TOTAL_PASSWORDS=1 ;;
+        combinations) ((TOTAL_COMBINATIONS++));;
         valid) ((VALID_CREDENTIALS++)) ;;
         *) echo "Error: Tipo de estadística no reconocida: $type" >&2 ;;
     esac
@@ -151,8 +158,7 @@ function test_credentials() {
     local server=$3
     local domain=$4
 
-    track_stats user
-    track_stats password
+    track_stats combinations
 
     # Ajustar el dominio si es "default"
     [[ "$domain" == "default" ]] && domain=""
@@ -255,24 +261,32 @@ function process_combination() {
     if [[ -n "$USERS_FILE" && -n "$PASSWORDS_FILE" ]]; then
         banner
         write_log ini
+        track_stats user "$USERS_FILE"
+        track_stats password "$PASSWORDS_FILE"
         process_users_and_passwords "$USERS_FILE" "$PASSWORDS_FILE" "$SERVER" "$DOMAIN"
         report_stats
         write_log fin
     elif [[ -n "$SINGLE_USER" && -n "$PASSWORDS_FILE" ]]; then
         banner
         write_log ini
+        track_stats suser
+        track_stats password "$PASSWORDS_FILE"
         process_single_user_and_passwords "$SINGLE_USER" "$PASSWORDS_FILE" "$SERVER" "$DOMAIN"
         report_stats
         write_log fin
     elif [[ -n "$USERS_FILE" && -n "$SINGLE_PASSWORD" ]]; then
         banner
         write_log ini
+        track_stats user "$USERS_FILE"
+        track_stats spass
         process_users_and_single_password "$USERS_FILE" "$SINGLE_PASSWORD" "$SERVER" "$DOMAIN"
         report_stats
         write_log fin
     elif [[ -n "$SINGLE_USER" && -n "$SINGLE_PASSWORD" ]]; then
         banner
         write_log ini
+        track_stats suser
+        track_stats spass
         process_single_user_and_password "$SINGLE_USER" "$SINGLE_PASSWORD" "$SERVER" "$DOMAIN"
         report_stats
         write_log fin
@@ -289,12 +303,15 @@ function report_stats() {
     echo -e "${B}  [i]${NF} Resumen de ejecución:"
     echo -e "    - Usuarios probados: $TOTAL_USERS"
     echo -e "    - Contraseñas probadas: $TOTAL_PASSWORDS"
+    echo -e "    - Combinaciones probadas: $TOTAL_COMBINATIONS"
     echo -e "    - Combinaciones válidas encontradas: $VALID_CREDENTIALS"
 
     write_log message "[i] Resumen:"
     write_log message "    - Usuarios probados: $TOTAL_USERS"
     write_log message "    - Contraseñas probadas: $TOTAL_PASSWORDS"
+    write_log message "    - Combinaciones probadas: $TOTAL_COMBINATIONS"
     write_log message "    - Combinaciones válidas encontradas: $VALID_CREDENTIALS"
+
 }
 
 
