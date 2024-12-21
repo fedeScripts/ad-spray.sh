@@ -1,7 +1,8 @@
 # ad-spray.sh
-Script BASH para realizar spraying de contraseñas en entornos de AD utilizando SMBClient.
+Script bash que realiza ataques de password Sprying y fuerza bruta sobre servidores SMB en entornos de AD, utilizando la herramienta smbclient. 
+
 ### Uso
-./ad-spray_v1.sh -U [archivo_usuarios] -u [usuario] -P [archivo_contraseñas] -p [contraseña] -s [servidor] -d [dominio] -t [nivel_de_tiempo]
+./ad-spray_v1.sh -U [archivo_usuarios] -p [contraseña] -s [servidor] -d [dominio]
 
 ##### Opciones:
 - 	-U    Archivo con la lista de usuarios (uno por línea)
@@ -10,4 +11,4 @@ Script BASH para realizar spraying de contraseñas en entornos de AD utilizando 
 - 	-p    Una única contraseña
 - 	-s    Servidor SMB (por ejemplo, 192.168.1.10)
 - 	-d    Dominio (opcional)
-- 	-t    Nivel de tiempo (1: Paranoid, 2: Stealth (por defecto), 3: Fast, 4: More fast)
+- 	-t    Velocidad (1: Paranoid, 2: Stealth (por defecto), 3: Fast, 4: More fast)
