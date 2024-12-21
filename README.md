@@ -29,5 +29,6 @@ Es necesario tener instalada la herramienta smbclient para utilizar este script.
 ```
 
 ## Autor
-- [@fedeScripts](https://github.com/fedeScripts)
+- Federico Galarza  - [@fedeScripts](https://github.com/fedeScripts) 
+
 [![linkedin](https://img.shields.io/badge/linkedin-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/federico-galarza)
