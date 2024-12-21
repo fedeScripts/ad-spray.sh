@@ -2,7 +2,7 @@
 Script bash que realiza ataques de password Sprying y fuerza bruta sobre servidores SMB en entornos de AD, utilizando la herramienta smbclient. 
 
 ### Uso
-./ad-spray_v1.sh -U [archivo_usuarios] -p [contraseña] -s [servidor] -d [dominio]
+./ad-spray.sh -U [archivo_usuarios] -p [contraseña] -s [servidor] -d [dominio]
 
 ##### Opciones:
 - 	-U    Archivo con la lista de usuarios (uno por línea)
